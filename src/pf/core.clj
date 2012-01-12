@@ -28,26 +28,26 @@
   (let [buffer-in (ByteBuffer/allocate 256)
         buffer-out (ByteBuffer/allocate 256)
         target (AsynchronousSocketChannel/open)]
+    (println "Incoming from " (. channel-in getRemoteAddress))
     (. target connect (InetSocketAddress. 9292) nil (callback
                                                       (completed [x y]
                                                         (. buffer-in clear)
                                                         (. buffer-out clear)
-                                                        (trampoline relay channel-in target buffer-in)
-                                                        (trampoline relay target channel-in buffer-out))))))
+                                                        (relay channel-in target buffer-in)
+                                                        (relay target channel-in buffer-out))))))
 
-(defn start-server []
+(defn start-server [port]
   (let [factory (Executors/defaultThreadFactory)
         service (Executors/newCachedThreadPool factory)
         group (AsynchronousChannelGroup/withCachedThreadPool service 1)
         server (AsynchronousServerSocketChannel/open group)]
     (doto server
-      (.bind (InetSocketAddress. 8080))
+      (.bind (InetSocketAddress. port))
       (.accept nil (callback
                      (completed [ch attr]
                        (. server accept nil this)
                        (handle ch)))))))
 
 (defn -main [& args]
-  (println "starting server")
-  (start-server)
+  (start-server 8080)
   (read-line))
