@@ -9,13 +9,17 @@
            [java.util.concurrent Executors])
   (:gen-class))
 
+(defmacro callback [& body]
+  `(proxy [CompletionHandler] []
+     ~@body))
+
 (defn relay [channel target buffer]
-  (. channel read buffer nil (proxy [CompletionHandler] []
+  (. channel read buffer nil (callback
                                (completed [br attr]
                                  (if (< br 0)
                                    (. channel close)
                                    (do (. buffer flip)
-                                       (. target write buffer nil (proxy [CompletionHandler] []
+                                       (. target write buffer nil (callback
                                           (completed [x y]
                                                      (. buffer clear)
                                                      (relay channel target buffer))))))))))
@@ -24,7 +28,7 @@
   (let [buffer-in (ByteBuffer/allocate 256)
         buffer-out (ByteBuffer/allocate 256)
         target (AsynchronousSocketChannel/open)]
-    (. target connect (InetSocketAddress. 9292) nil (proxy [CompletionHandler] []
+    (. target connect (InetSocketAddress. 9292) nil (callback
                                                       (completed [x y]
                                                         (. buffer-in clear)
                                                         (. buffer-out clear)
@@ -38,7 +42,7 @@
         server (AsynchronousServerSocketChannel/open group)]
     (doto server
       (.bind (InetSocketAddress. 8080))
-      (.accept nil (proxy [CompletionHandler] []
+      (.accept nil (callback
                      (completed [ch attr]
                        (. server accept nil this)
                        (handle ch)))))))
