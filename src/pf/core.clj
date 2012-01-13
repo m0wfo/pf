@@ -7,10 +7,9 @@
            [java.nio ByteBuffer]
            [java.net InetSocketAddress]
            [java.util.concurrent Executors])
-  (:use [pf.logging])
+  (:use [pf.logging]
+        [pf.backends])
   (:gen-class))
-
-(def app-servers (ref #{(InetSocketAddress. 9292)}))
 
 (defmacro callback [& body]
   `(proxy [CompletionHandler] []
@@ -33,7 +32,7 @@
 
 (defn handle [in]
   (let [out (AsynchronousSocketChannel/open)
-        backend (first @app-servers)]
+        backend (app-server)]
     (. out connect backend nil (callback
                                 (completed [x y]
                                            ; Patch
@@ -44,8 +43,8 @@
 
                                 (failed [reason att]
                                         (log reason)
-                                        (dosync (alter app-servers disj backend))
-                                        (if-not (empty? @app-servers)
+                                        (decommission backend)
+                                        (if (backends?)
                                           (handle in)
                                           (. in close)))))))
 
