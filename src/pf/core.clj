@@ -14,8 +14,11 @@
   `(proxy [CompletionHandler] []
      ~@body))
 
-(defn relay [channel target buffer]
-  (. channel read buffer nil (callback
+(defn relay
+  ([channel target] (let [bb (ByteBuffer/allocate 512)]
+                     (. bb clear)
+                     (relay channel target bb)))
+  ([channel target buffer] (. channel read buffer nil (callback
                                (completed [br attr]
                                           (if (<= 0 br)
                                             (do
@@ -23,19 +26,15 @@
                                               (. target write buffer nil (callback
                                                                           (completed [x y]
                                                                                      (. buffer clear)
-                                                                                     (relay channel target buffer))))))))))
+                                                                                     (relay channel target buffer)))))))))))
 
 (defn handle [channel-in]
-  (let [buffer-in (ByteBuffer/allocate 512)
-        buffer-out (ByteBuffer/allocate 512)
-        target (AsynchronousSocketChannel/open)]
+  (let [target (AsynchronousSocketChannel/open)]
     (log "Incoming from " (. channel-in getRemoteAddress))
     (. target connect (InetSocketAddress. 9292) nil (callback
                                                       (completed [x y]
-                                                        (. buffer-in clear)
-                                                        (. buffer-out clear)
-                                                        (relay channel-in target buffer-in)
-                                                        (relay target channel-in buffer-out))))))
+                                                        (relay channel-in target)
+                                                        (relay target channel-in))))))
 
 (defn start-server [port]
   (let [factory (Executors/defaultThreadFactory)
