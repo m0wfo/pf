@@ -10,6 +10,9 @@
   (:use [pf.logging])
   (:gen-class))
 
+(def parked (ref 0))
+
+
 (defmacro callback [& body]
   `(proxy [CompletionHandler] []
      ~@body))
@@ -31,14 +34,15 @@
 
 (defn handle [in]
   (let [out (AsynchronousSocketChannel/open)]
-    (log "Incoming from " (. in getRemoteAddress))
     (. out connect (InetSocketAddress. 9292) nil (callback
                                                       (completed [x y]
                                                         (relay in out)
                                                         (relay out in))))))
 
-(defn start-server [port]
-  (let [factory (Executors/defaultThreadFactory)
+(defn start-server
+  ([port] (start-server port #(handle %)))
+  
+  ([port handler] (let [factory (Executors/defaultThreadFactory)
         service (Executors/newCachedThreadPool factory)
         group (AsynchronousChannelGroup/withCachedThreadPool service 1)
         server (AsynchronousServerSocketChannel/open group)]
@@ -47,8 +51,8 @@
       (.accept nil (callback
                     (completed [ch attr]
                                (. server accept nil this)
-                               (handle ch)))))
-    server))
+                               (handler ch)))))
+    server)))
 
 (defn stop-server [server]
   (. server close))
