@@ -10,8 +10,7 @@
   (:use [pf.logging])
   (:gen-class))
 
-(def parked (ref 0))
-
+(def app-servers (ref #{(InetSocketAddress. 9292)}))
 
 (defmacro callback [& body]
   `(proxy [CompletionHandler] []
@@ -33,11 +32,22 @@
                                                                                      (relay channel target buffer)))))))))))
 
 (defn handle [in]
-  (let [out (AsynchronousSocketChannel/open)]
-    (. out connect (InetSocketAddress. 9292) nil (callback
-                                                      (completed [x y]
-                                                        (relay in out)
-                                                        (relay out in))))))
+  (let [out (AsynchronousSocketChannel/open)
+        backend (first @app-servers)]
+    (. out connect backend nil (callback
+                                (completed [x y]
+                                           ; Patch
+                                           ; the two
+                                           ; channels together
+                                           (relay in out)
+                                           (relay out in))
+
+                                (failed [reason att]
+                                        (log reason)
+                                        (dosync (alter app-servers disj backend))
+                                        (if-not (empty? @app-servers)
+                                          (handle in)
+                                          (. in close)))))))
 
 (defn start-server
   ([port] (start-server port #(handle %)))
