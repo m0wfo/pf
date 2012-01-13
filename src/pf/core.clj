@@ -7,6 +7,7 @@
            [java.nio ByteBuffer]
            [java.net InetSocketAddress]
            [java.util.concurrent Executors])
+  (:use [pf.logging])
   (:gen-class))
 
 (defmacro callback [& body]
@@ -16,19 +17,19 @@
 (defn relay [channel target buffer]
   (. channel read buffer nil (callback
                                (completed [br attr]
-                                 (if (< br 0)
-                                   (. channel close)
-                                   (do (. buffer flip)
-                                       (. target write buffer nil (callback
-                                          (completed [x y]
-                                                     (. buffer clear)
-                                                     (relay channel target buffer))))))))))
+                                          (if (<= 0 br)
+                                            (do
+                                              (. buffer flip)
+                                              (. target write buffer nil (callback
+                                                                          (completed [x y]
+                                                                                     (. buffer clear)
+                                                                                     (relay channel target buffer))))))))))
 
 (defn handle [channel-in]
-  (let [buffer-in (ByteBuffer/allocate 256)
-        buffer-out (ByteBuffer/allocate 256)
+  (let [buffer-in (ByteBuffer/allocate 512)
+        buffer-out (ByteBuffer/allocate 512)
         target (AsynchronousSocketChannel/open)]
-    (println "Incoming from " (. channel-in getRemoteAddress))
+    (log "Incoming from " (. channel-in getRemoteAddress))
     (. target connect (InetSocketAddress. 9292) nil (callback
                                                       (completed [x y]
                                                         (. buffer-in clear)
@@ -44,10 +45,12 @@
     (doto server
       (.bind (InetSocketAddress. port))
       (.accept nil (callback
-                     (completed [ch attr]
-                       (. server accept nil this)
-                       (handle ch)))))))
+                    (completed [ch attr]
+                               (. server accept nil this)
+                               (handle ch)))))
+    server))
 
-(defn -main [& args]
-  (start-server 8080)
-  (read-line))
+(defn stop-server [server]
+  (. server close))
+
+(def s (start-server 8080))
