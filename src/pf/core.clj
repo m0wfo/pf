@@ -29,13 +29,13 @@
                                                                                      (. buffer clear)
                                                                                      (relay channel target buffer)))))))))))
 
-(defn handle [channel-in]
-  (let [target (AsynchronousSocketChannel/open)]
-    (log "Incoming from " (. channel-in getRemoteAddress))
-    (. target connect (InetSocketAddress. 9292) nil (callback
+(defn handle [in]
+  (let [out (AsynchronousSocketChannel/open)]
+    (log "Incoming from " (. in getRemoteAddress))
+    (. out connect (InetSocketAddress. 9292) nil (callback
                                                       (completed [x y]
-                                                        (relay channel-in target)
-                                                        (relay target channel-in))))))
+                                                        (relay in out)
+                                                        (relay out in))))))
 
 (defn start-server [port]
   (let [factory (Executors/defaultThreadFactory)
