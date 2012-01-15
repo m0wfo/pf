@@ -15,20 +15,34 @@
   `(proxy [CompletionHandler] []
      ~@body))
 
+(defn read-channel [channel buffer cb]
+  "Read from a channel, executing a callback when data is received."
+  (. channel read buffer nil (callback
+                                 (completed [bytes-read att]
+                                            (if (<= 0 bytes-read)
+                                              (do
+                                                (. buffer flip)
+                                                (cb bytes-read att)))))))
+
+(defn write-channel [channel buffer cb]
+  "Write to a channel, executing a callback when the contents
+   of a buffer has been written."
+  (. channel write buffer nil (callback
+                        (completed [x y]
+                                   (. buffer clear)
+                                   (cb)))))
+
 (defn relay
-  ([channel target] (let [bb (ByteBuffer/allocate 512)]
+  "Forward the contents of the first channel into a second one."
+  ([source target] (let [bb (ByteBuffer/allocate 512)]
                      (. bb clear)
-                     (relay channel target bb)))
+                     (relay source target bb)))
   
-  ([channel target buffer] (. channel read buffer nil (callback
-                               (completed [br attr]
-                                          (if (<= 0 br)
-                                            (do
-                                              (. buffer flip)
-                                              (. target write buffer nil (callback
-                                                                          (completed [x y]
-                                                                                     (. buffer clear)
-                                                                                     (relay channel target buffer)))))))))))
+  ([source target buffer]
+     (read-channel source buffer (fn [read attr]
+                                   (write-channel target buffer
+                                                  (fn [] (relay source target buffer)))))))
+
 
 (defn handle [in]
   (let [out (AsynchronousSocketChannel/open)
