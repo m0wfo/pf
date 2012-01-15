@@ -15,6 +15,8 @@
   `(proxy [CompletionHandler] []
      ~@body))
 
+(defn new-channel [] (AsynchronousSocketChannel/open))
+
 (defn read-channel [channel buffer cb]
   "Read from a channel, executing a callback when data is received."
   (. channel read buffer nil (callback
@@ -44,26 +46,10 @@
                                                   (fn [] (relay source target buffer)))))))
 
 
-(defn handle [in]
-  (let [out (AsynchronousSocketChannel/open)
-        backend (app-server)]
-    (. out connect backend nil (callback
-                                (completed [x y]
-                                           ; Patch
-                                           ; the two
-                                           ; channels together
-                                           (relay in out)
-                                           (relay out in))
 
-                                (failed [reason att]
-                                        (log reason)
-                                        (decommission backend)
-                                        (if (backends?)
-                                          (handle in)
-                                          (. in close)))))))
 
 (defn start-server
-  ([port] (start-server port #(handle %)))
+  ([port] (start-server port #(. % close)))
   
   ([port handler] (let [factory (Executors/defaultThreadFactory)
         service (Executors/newCachedThreadPool factory)
@@ -80,4 +66,3 @@
 (defn stop-server [server]
   (. server close))
 
-(def s (start-server 8080))
