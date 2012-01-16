@@ -6,7 +6,7 @@
 (defn handle [in]
   (let [out (new-channel)
         backend (app-server)]
-    (. out connect backend nil (callback
+    (. (out :channel) connect backend nil (callback
                                 (completed [x y]
                                            ; Patch
                                            ; the two
@@ -21,4 +21,4 @@
                                           (handle in)
                                           (. in close)))))))
 
-(def s (start-server 8080 #(handle %)))
+(defn s [] (start-server 8080 #(handle %)))
