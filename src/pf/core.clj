@@ -19,7 +19,7 @@
   `(proxy [CompletionHandler] []
      ~@body))
 
-(defn new-channel [] (struct counted-channel (AsynchronousSocketChannel/open) (ref 0)))
+(defn new-channel [] (struct counted-channel (AsynchronousSocketChannel/open) (agent 0)))
 
 (defn read-channel [channel buffer cb]
   (. (channel :channel) read buffer nil (callback
@@ -90,13 +90,11 @@
     (add-watch up nil (fn [k r old now]
                         (if (false? now)
                           (letfn [(halt [] (kill-server server group service))]
-                            (println "shutting down...")
                             (clear-backlog backlog handler)
                             
                             (if (= 0 @active)
                               (halt)
                               (add-watch active nil (fn [x y o n]
-                                                    (println "active: " n)
                                                     (if (= 0 n) (halt)))))))))
 
     (add-watch parked nil (fn [k r old now]
