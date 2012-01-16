@@ -39,7 +39,11 @@
 (defn new-channel [] (struct counted-channel (AsynchronousSocketChannel/open) nil))
 
 (defn read-channel
-  [channel buffer cb] (. (channel :channel) read buffer nil (callback
+  ([channel cb] (let [bb (ByteBuffer/allocate 512)]
+                  (. bb clear)
+                  (read-channel channel cb bb)))
+
+  ([channel cb buffer] (. (channel :channel) read buffer nil (callback
                                          (completed [bytes-read att]
                                                     (if (<= 0 bytes-read)
                                                       (do
@@ -50,9 +54,9 @@
                                                         (if-not (nil? (channel :counter))
                                                           (dosync (commute (channel :counter) dec))))))
                                          (failed [reason att]
-                                                 (println "bumcakes")))))
+                                                 (println "bumcakes"))))))
 
-(defn write-channel [channel buffer cb]
+(defn write-channel [channel cb buffer]
   "Write to a channel, executing a callback when the contents
    of a buffer has been written."
   (. (channel :channel) write buffer nil (callback
@@ -62,14 +66,10 @@
 
 (defn relay
   "Forward the contents of the first channel into a second one."
-  ([source target] (let [bb (ByteBuffer/allocate 512)]
-                     (. bb clear)
-                     (relay source target bb)))
-  
-  ([source target buffer]
-     (read-channel source buffer (fn [read attr]
-                                   (write-channel target buffer
-                                                  (fn [] (relay source target buffer)))))))
+  ([source target]
+     (read-channel source (fn [read buffer]
+                            (write-channel target
+                                           (fn [] (relay source target)) buffer)))))
 
 (defn clear-backlog [backlog handler]
   "Passes a handler to each request wrapped in an agent

@@ -18,7 +18,6 @@
                                         (log reason)
                                         (decommission backend)
                                         (if (backends?)
-                                          (handle in)
-                                          (. in close)))))))
+                                          (handle in)))))))
 
 (defn s [] (start-server 8080 #(handle %)))
