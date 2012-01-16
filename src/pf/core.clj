@@ -29,7 +29,7 @@
    then perform action."
   (if (= @value expected)
      (action)
-     (let [uid (. (java.util.UUID/randomUUID) toString)]
+     (let [uid (new-uid)]
        (add-watch value uid (fn [k v old-val new-val]
                                 (if (= new-val expected)
                                   (do
