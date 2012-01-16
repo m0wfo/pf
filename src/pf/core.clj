@@ -39,21 +39,18 @@
 (defn new-channel [] (struct counted-channel (AsynchronousSocketChannel/open) nil))
 
 (defn read-channel
-  ([channel cb] (let [bb (ByteBuffer/allocate 512)]
-                  (. bb clear)
-                  (read-channel channel buffer cb)))
-  ([channel buffer cb] (. (channel :channel) read buffer nil (callback
+  [channel buffer cb] (. (channel :channel) read buffer nil (callback
                                          (completed [bytes-read att]
                                                     (if (<= 0 bytes-read)
                                                       (do
                                                         (. buffer flip)
-                                                        (cb bytes-read att))
+                                                        (cb bytes-read buffer))
                                                       (do
                                                         (. (channel :channel) close)
                                                         (if-not (nil? (channel :counter))
                                                           (dosync (commute (channel :counter) dec))))))
                                          (failed [reason att]
-                                                 (println "bumcakes"))))))
+                                                 (println "bumcakes")))))
 
 (defn write-channel [channel buffer cb]
   "Write to a channel, executing a callback when the contents
