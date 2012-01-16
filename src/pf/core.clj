@@ -28,8 +28,7 @@
                                                       (do
                                                         (. buffer flip)
                                                         (cb bytes-read att))
-                                                      (do
-                                                       (send (channel :counter) dec)))))))
+                                                      (send (channel :counter) dec))))))
 
 (defn write-channel [channel buffer cb]
   "Write to a channel, executing a callback when the contents
@@ -90,7 +89,11 @@
     (add-watch up nil (fn [k r old now]
                         (if (false? now)
                           (letfn [(halt [] (kill-server server group service))]
-                            (clear-backlog backlog handler)
+                            ; If we initiate shutdown while server is
+                            ; parked, a deadlock will occur if the backlog is
+                            ; non-empty. Since we're no longer taking requests
+                            ; it's safe to unpark and clear any stragglers
+                            (compare-and-set! parked true false)
                             
                             (if (= 0 @active)
                               (halt)
