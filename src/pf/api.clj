@@ -3,12 +3,15 @@
         [clojure.core.match :only [match]])
   (:require [clojure.string :only split]))
 
+(def *base-headers* {:Server "pf 0.0.1 - Bumcakes"})
+
 (defn split-string [str predicate]
   (clojure.string/split str predicate))
 
 (defn headers [options]
   (let [lines (map #(str (name (first %)) ": " (last %)) options)
-        joined (interpose "\r\n" lines)]))
+        joined (interpose "\r\n" lines)]
+    (apply str (apply str joined) "\r\n\r\n")))
 
 (defn dispatch [keys params]
   (match [keys params]
@@ -21,6 +24,9 @@
          [["POST" "/stop"] _] (println "stop")
          [["POST" "/park"] _] (println "park")
          [["POST" "/unpark"] _] (println "unpark")
+         [["HEAD" _] _] (println "head request")
+         [["PUT" _] _] (println "put")
+         [["DELETE" _] _] (println "delete")
            :else (println "default route")))
 
 (defn parse-params [in]
