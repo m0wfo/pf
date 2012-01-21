@@ -1,4 +1,6 @@
 (ns pf.api
+  (:import [java.nio.file Files Paths]
+           [java.net URI])
   (:use [pf.core]
         [clojure.core.match :only [match]])
   (:require [clojure.string :only split]))
@@ -14,7 +16,8 @@
   (clojure.string/split str predicate))
 
 (defn headers [options]
-  (let [lines (map #(str (name (first %)) ": " (last %)) options)
+  (let [merged (merge base-headers options)
+        lines (map #(str (name (first %)) ": " (last %)) merged)
         joined (interpose "\r\n" lines)]
     (apply str (apply str joined) "\r\n\r\n")))
 
@@ -24,10 +27,24 @@
                               (split-string (last keys) #"/")))]
     
     (match [method path]
-           ["GET" []] (println "index page")
-           ["GET" ["listeners"]] (println "foo")
+           ["GET" []] (index-page)
+           ["GET" ["listeners" _ "park"]] (respond 200 "wibble" "text/plain")
            ["HEAD" _] (not-implemented)
-           :else (println "default route"))))
+           :else (not-found))))
+
+(defn render-file
+  ([name] (render-file name 200))
+  ([name code]
+     (let [resource (.getFile (clojure.java.io/resource name))
+        path (Paths/get (URI. (apply str "file://" resource)))
+        data (apply str (Files/readAllLines path pf.core/charset))]
+    (respond code data "text/html"))))
+
+(defn index-page []
+  (render-file "index.html"))
+
+(defn not-found []
+  (render-file "404.html" 404))
 
 (defn not-implemented []
   (respond 501))
@@ -50,11 +67,15 @@
       (dispatch route nil))))
 
 (defn respond [code & [content type]]
-  (let [http-version "HTTP/1.1"
-        desc (get response-codes code)
-        topline (apply str http-version " " code " " desc "\r\n")
-        headers (apply str topline (headers base-headers))]
-    (pf.core/to-bb headers)))
+  (letfn [(extras [c t]
+            (if-not (nil? c)
+              {:Content-type t :Content-length (count c)}))]
+    (let [http-version "HTTP/1.1"
+          desc (get response-codes code)
+          topline (apply str http-version " " code " " desc "\r\n")
+          hdrs (headers (extras content type))
+          response (apply str topline hdrs content)]
+      (pf.core/to-bb response))))
 
 (defn handle [request]
   (read-channel request (fn [br buffer]
