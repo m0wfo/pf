@@ -46,6 +46,11 @@
 
 (defn new-channel [] (struct counted-channel (AsynchronousSocketChannel/open) nil))
 
+(defn close-channel [channel]
+  (. (channel :channel) close)
+  (if-not (nil? (channel :counter))
+    (dosync (commute (channel :counter) dec))))
+
 (defn read-channel
   ([channel cb] (let [bb (ByteBuffer/allocate 512)]
                   (. bb clear)
@@ -57,10 +62,7 @@
                                                       (do
                                                         (. buffer flip)
                                                         (cb bytes-read buffer))
-                                                      (do
-                                                        (. (channel :channel) close)
-                                                        (if-not (nil? (channel :counter))
-                                                          (dosync (commute (channel :counter) dec))))))
+                                                      (close-channel channel)))
                                          (failed [reason att]
                                                  (println "bumcakes"))))))
 
