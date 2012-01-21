@@ -3,7 +3,12 @@
         [clojure.core.match :only [match]])
   (:require [clojure.string :only split]))
 
-(def *base-headers* {:Server "pf 0.0.1 - Bumcakes"})
+(def base-headers {:Server "pf 0.0.1 (Bumcakes)" :Connection "close"})
+
+(def response-codes {200 "OK"
+                       202 "Accepted"
+                       404 "Not Found"
+                       501 "Not Implemented"})
 
 (defn split-string [str predicate]
   (clojure.string/split str predicate))
@@ -14,20 +19,18 @@
     (apply str (apply str joined) "\r\n\r\n")))
 
 (defn dispatch [keys params]
-  (match [keys params]
-         [["GET" "/"] _] (println "index page")
-         [["POST" "/register"] ({:host _ :port _ :version _} :only [:host :port :version])] (println "register")
-         [["POST" "/unregister"] ({:host _ :port _} :only [:host :port])] (println "unregister")
-         [["POST" "/transition"] _] (println "transition")
-         [["POST" "/rollback"] _] (println "rollback")
-         [["POST" "/start"] _] (println "start") 
-         [["POST" "/stop"] _] (println "stop")
-         [["POST" "/park"] _] (println "park")
-         [["POST" "/unpark"] _] (println "unpark")
-         [["HEAD" _] _] (println "head request")
-         [["PUT" _] _] (println "put")
-         [["DELETE" _] _] (println "delete")
-           :else (println "default route")))
+  (let [method (first keys)
+        path (into [] (remove #(= % "")
+                              (split-string (last keys) #"/")))]
+    
+    (match [method path]
+           ["GET" []] (println "index page")
+           ["GET" ["listeners"]] (println "foo")
+           ["HEAD" _] (not-implemented)
+           :else (println "default route"))))
+
+(defn not-implemented []
+  (respond 501))
 
 (defn parse-params [in]
   (let [pairs (split-string in #"&")
@@ -37,7 +40,7 @@
                               (last k-v)])) pairs)]
     (into {} keys-values)))
 
-(defn parse-headers [in]
+(defn process [in]
   (let [header-body (split-string in  #"\r\n\r\n")
         lines (split-string (first header-body) #"\r\n")
         cmd (split-string (first lines) #"\s+")
@@ -46,12 +49,19 @@
       (dispatch route (parse-params (last header-body)))
       (dispatch route nil))))
 
+(defn respond [code & [content type]]
+  (let [http-version "HTTP/1.1"
+        desc (get response-codes code)
+        topline (apply str http-version " " code " " desc "\r\n")
+        headers (apply str topline (headers base-headers))]
+    (pf.core/to-bb headers)))
+
 (defn handle [request]
   (read-channel request (fn [br buffer]
-                          (let [cs (java.nio.charset.Charset/forName "UTF-8")
-                                dec (. cs newDecoder)
-                                cb (. dec decode buffer)]
-                            (parse-headers (. cb toString)))
-                          (. (request :channel) close))))
+                          (let [data (pf.core/to-string buffer)
+                                response (process data)]
+                            (write-channel request
+                                           #(. (request :channel) close)
+                                           response)))))
 
 (def api (start-server 1337 #(handle %)))

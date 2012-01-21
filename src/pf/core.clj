@@ -19,8 +19,16 @@
   `(proxy [CompletionHandler] []
      ~@body))
 
+(def charset (java.nio.charset.Charset/forName "UTF-8"))
+
 (defn new-uid {:private true} []
   (. (java.util.UUID/randomUUID) toString))
+
+(defn to-string [buffer]
+  (.toString (.decode charset buffer)))
+
+(defn to-bb [string]
+  (.encode charset string))
 
 (defn test-or-watch [value expected action]
   "Compares a concurrency primitive's value with an expected
