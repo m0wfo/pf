@@ -40,8 +40,9 @@
   ([name] (render-file name 200))
   ([name code]
      (let [resource (.getFile (clojure.java.io/resource name))
-        path (Paths/get (URI. (apply str "file://" resource)))
-        data (apply str (Files/readAllLines path pf.core/charset))]
+           path (Paths/get (URI. (apply str "file://" resource)))
+           lines (interpose "\r\n" (Files/readAllLines path pf.core/charset))
+           data (apply str lines)]
     (respond code data "text/html"))))
 
 (defn index-page []
