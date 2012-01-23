@@ -74,6 +74,7 @@
            ["GET" ["listeners"]] (respond 200 "[]" "application/json")
            ["POST" ["listeners"]] (create-listener params)
            ["HEAD" _] (dispatch (assoc keys 0 "GET") {})
+           [(:or "PUT" "DELETE") _] (not-implemented)
            :else (not-found))))
 
 (defn parse-params [in]
