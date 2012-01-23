@@ -3,6 +3,8 @@
         [pf.backends]
         [pf.logging]))
 
+(defrecord Listener [name acceptor])
+
 (defn handle [in]
   (let [out (new-channel)
         backend (app-server)]
@@ -19,5 +21,9 @@
                                         (decommission backend)
                                         (if (backends?)
                                           (handle in)))))))
+
+(defn new-listener [name port]
+  (let [acceptor (pf.core/start-server port)]
+    (Listener. name acceptor)))
 
 (defn s [] (start-server 8080 #(handle %)))
