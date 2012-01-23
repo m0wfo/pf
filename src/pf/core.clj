@@ -52,27 +52,27 @@
 (defrecord Channel [channel counter]
   ChannelOps
   
-  (close-channel [channel]
-    (. (:channel channel) close)
-    (dosync (commute (:counter channel) dec)))
+  (close-channel [this]
+    (. (:channel this) close)
+    (dosync (commute (:counter this) dec)))
 
-  (read-channel [channel cb] (let [bb (ByteBuffer/allocate 512)]
+  (read-channel [this cb] (let [bb (ByteBuffer/allocate 512)]
                   (. bb clear)
-                  (read-channel channel cb bb)))
+                  (read-channel this cb bb)))
   
-  (read-channel [channel cb buffer] (. (channel :channel) read buffer nil (callback
+  (read-channel [this cb buffer] (. (:channel this) read buffer nil (callback
                                          (completed [bytes-read att]
                                                     (if (<= 0 bytes-read)
                                                       (do
                                                         (. buffer flip)
                                                         (cb bytes-read buffer))
-                                                      (close-channel channel)))
+                                                      (close-channel this)))
                                          (failed [reason att]
                                                  (println "bumcakes")))))
-  (write-channel [channel cb buffer]
+  (write-channel [this cb buffer]
   "Write to a channel, executing a callback when the contents
    of a buffer has been written."
-  (. (channel :channel) write buffer nil (callback
+  (. (:channel this) write buffer nil (callback
                         (completed [x y]
                                    (. buffer clear)
                                    (cb)))))
