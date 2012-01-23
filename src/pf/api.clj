@@ -102,5 +102,6 @@
                                            #(close-channel request)
                                            response)))))
 
-(def api (start-server 1337 #(handle %)))
+(def api (pf.core/create-server 1337 #(handle %)))
+(pf.core/start api)
 

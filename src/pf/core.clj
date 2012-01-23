@@ -8,8 +8,7 @@
            [java.net InetSocketAddress]
            [java.util.concurrent Executors])
   (:use [pf.logging]
-        [pf.backends])
-  (:gen-class))
+        [pf.backends]))
 
 (defprotocol ChannelOps
   "Channel manipulation interface."
@@ -18,7 +17,13 @@
   (write-channel [this cb buffer])
   (relay [source target]))
 
-(defstruct acceptor :channel :up :parked :active)
+(defprotocol Acceptor
+  "Server manipulation interface."
+  (start [this])
+  (park [this cb])
+  (unpark [this])
+  (parked? [this])
+  (stop [this]))
 
 (defmacro callback [& body]
   `(proxy [CompletionHandler] []
@@ -51,7 +56,6 @@
 
 (defrecord Channel [channel counter]
   ChannelOps
-  
   (close-channel [this]
     (. (:channel this) close)
     (dosync (commute (:counter this) dec)))
@@ -85,7 +89,7 @@
 
 (defn new-channel [] (Channel. (AsynchronousSocketChannel/open) nil))
 
-(defn clear-backlog [backlog handler]
+(defn clear-backlog {:private true} [backlog handler]
   "Passes a handler to each request wrapped in an agent
   and accumulated in a backlog, iteratively removing it."
   (doseq [request @backlog]
@@ -98,20 +102,18 @@
   (. group shutdown)
   (. service shutdownNow))
 
-(defn start-server
-  ([port] (start-server port #(. % close)))
-  
-  ([port handler] (let [factory (Executors/defaultThreadFactory)
-                        service (Executors/newCachedThreadPool factory)
-                        group (AsynchronousChannelGroup/withCachedThreadPool service 1)
-                        server (AsynchronousServerSocketChannel/open group)
-                        up (atom true)
-                        parked (atom false)
-                        backlog (ref '())
-                        active (ref 0)]
+(defrecord Server [port handler up parked active channel group service]
+  Acceptor
+  (start [this]
+    (let [backlog (ref '())
+          server (:channel this)
+          up (:up this)
+          parked (:parked this)
+          active (:active this)
+          handler (:handler this)]
 
     (doto server
-      (.bind (InetSocketAddress. port))
+      (.bind (InetSocketAddress. (:port this)))
       (.accept nil (callback
                     (completed [ch attr]
                                (if (true? @up)
@@ -128,7 +130,7 @@
 
     (add-watch up nil (fn [k r old now]
                         (if (false? now)
-                          (letfn [(halt [] (kill-server server group service))]
+                          (letfn [(halt [] (kill-server server (:group this) (:service this)))]
                             ; If we initiate shutdown while server is
                             ; parked, a deadlock will occur if the backlog is
                             ; non-empty. Since we're no longer taking requests
@@ -143,39 +145,47 @@
 
     (add-watch parked nil (fn [k r old now]
                             (if (false? now)
-                              (clear-backlog backlog handler))))
-    
-    (struct acceptor server up parked active))))
+                              (clear-backlog backlog handler))))))
 
-(defn server-parked? [server]
-  "True if the given server is parked."
-  (let [active (server :active)
-        parked (server :parked)]
-    (and (= @active 0) (true? @parked))))
+  (park [this cb]
+    "Wait for current requests to finish, and hold new ones
+     in a backlog. When the server is unparked the backlog of
+     requests will be passed through to the backends. If a
+     callback is supplied, it will be executed when all active
+     requests have closed."
+    (if (compare-and-set! (:parked this) false true)
+      (if-not (nil? cb)
+        (letfn [(await-clients [server cb]
+                  (future
+                    (while (not (= 0 (server :active)))
+                      (Thread/sleep 100))
+                    (cb)))]
+          (await-clients this cb)))))
 
-(defn await-clients {:private true} [server cb]
-  (future
-    (while (not (= 0 (server :active)))
-      (Thread/sleep 100))
-    (cb)))
+  (unpark [this]
+    "Passes new requests straight through to the backends and
+     clears the request backlog that accumulated while the server
+     was parked."
+    (compare-and-set! (:parked this) true false))
 
-(defn park-server [server & [cb]]
-  "Wait for current requests to finish, and hold new ones
-   in a backlog. When the server is unparked the backlog of
-   requests will be passed through to the backends. If a
-   callback is supplied, it will be executed when all active
-   requests have closed."
-  (if (compare-and-set! (server :parked) false true)
-    (if-not (nil? cb) (await-clients server cb))))
+  (parked? [this]
+    "True if the given server is parked."
+    (let [active (:active this)
+          parked (:parked this)]
+      (and (= @active 0) (true? @parked))))
+  
+  (stop [this]
+    "Gracefully shutdown a server, waiting for all
+    incoming connections to close. Returns immediately."
+    (compare-and-set! (:up this) true false)))
 
-(defn unpark-server [server]
-  "Passes new requests straight through to the backends and
-   clears the request backlog that accumulated while the server
-   was parked."
-  (compare-and-set! (server :parked) true false))
-
-(defn stop-server [server]
-  "Gracefully shutdown a server, waiting for all
-  incoming connections to close. Returns immediately."
-  (compare-and-set! (server :up) true false))
+(defn create-server [port handler]
+  (let [factory (Executors/defaultThreadFactory)
+        service (Executors/newCachedThreadPool factory)
+        group (AsynchronousChannelGroup/withCachedThreadPool service 1)
+        channel (AsynchronousServerSocketChannel/open group)
+        up (atom true)
+        parked (atom false)        
+        active (ref 0)]
+    (Server. port handler up parked active channel group service)))
 
