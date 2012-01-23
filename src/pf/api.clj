@@ -73,7 +73,7 @@
            ["GET" []] (index-page)
            ["GET" ["listeners"]] (respond 200 "[]" "application/json")
            ["POST" ["listeners"]] (create-listener params)
-           ["HEAD" _] (not-implemented)
+           ["HEAD" _] (dispatch (assoc keys 0 "GET") {})
            :else (not-found))))
 
 (defn parse-params [in]
