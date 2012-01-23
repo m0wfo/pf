@@ -11,9 +11,14 @@
         [pf.backends])
   (:gen-class))
 
+(defprotocol ChannelOps
+  "Channel manipulation interface."
+  (close-channel [this])
+  (read-channel [this cb] [this cb buffer])
+  (write-channel [this cb buffer])
+  (relay [source target]))
 
 (defstruct acceptor :channel :up :parked :active)
-(defstruct counted-channel :channel :counter)
 
 (defmacro callback [& body]
   `(proxy [CompletionHandler] []
@@ -44,19 +49,18 @@
                                     (remove-watch value uid)
                                     (action))))))))
 
-(defn new-channel [] (struct counted-channel (AsynchronousSocketChannel/open) nil))
+(defrecord Channel [channel counter]
+  ChannelOps
+  
+  (close-channel [channel]
+    (. (:channel channel) close)
+    (dosync (commute (:counter channel) dec)))
 
-(defn close-channel [channel]
-  (. (channel :channel) close)
-  (if-not (nil? (channel :counter))
-    (dosync (commute (channel :counter) dec))))
-
-(defn read-channel
-  ([channel cb] (let [bb (ByteBuffer/allocate 512)]
+  (read-channel [channel cb] (let [bb (ByteBuffer/allocate 512)]
                   (. bb clear)
                   (read-channel channel cb bb)))
-
-  ([channel cb buffer] (. (channel :channel) read buffer nil (callback
+  
+  (read-channel [channel cb buffer] (. (channel :channel) read buffer nil (callback
                                          (completed [bytes-read att]
                                                     (if (<= 0 bytes-read)
                                                       (do
@@ -64,9 +68,8 @@
                                                         (cb bytes-read buffer))
                                                       (close-channel channel)))
                                          (failed [reason att]
-                                                 (println "bumcakes"))))))
-
-(defn write-channel [channel cb buffer]
+                                                 (println "bumcakes")))))
+  (write-channel [channel cb buffer]
   "Write to a channel, executing a callback when the contents
    of a buffer has been written."
   (. (channel :channel) write buffer nil (callback
@@ -74,12 +77,13 @@
                                    (. buffer clear)
                                    (cb)))))
 
-(defn relay
-  "Forward the contents of the first channel into a second one."
-  ([source target]
+  (relay [source target]
+    "Forward the contents of the first channel into a second one."
      (read-channel source (fn [read buffer]
                             (write-channel target
                                            (fn [] (relay source target)) buffer)))))
+
+(defn new-channel [] (Channel. (AsynchronousSocketChannel/open) nil))
 
 (defn clear-backlog [backlog handler]
   "Passes a handler to each request wrapped in an agent
@@ -117,10 +121,10 @@
                                    (if (true? @parked)
                                      (dosync
                                       (alter backlog conj
-                                             (agent (struct counted-channel ch nil))))
+                                             (agent (Channel. ch nil))))
                                      (do
                                        (dosync (commute active inc))
-                                       (handler (struct counted-channel ch active))))))))))
+                                       (handler (Channel. ch active))))))))))
 
     (add-watch up nil (fn [k r old now]
                         (if (false? now)
