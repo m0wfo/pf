@@ -10,6 +10,8 @@
   (:use [pf.logging]
         [pf.backends]))
 
+(set! *warn-on-reflection* true)
+
 (defprotocol ChannelOps
   "Channel manipulation interface."
   (close-channel [this])
@@ -186,6 +188,6 @@
         channel (AsynchronousServerSocketChannel/open group)
         up (atom true)
         parked (atom false)        
-        active (ref 0)]
+        active (ref (int 0))]
     (Server. port handler up parked active channel group service)))
 
