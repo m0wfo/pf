@@ -7,8 +7,7 @@
            [java.nio ByteBuffer]
            [java.net InetSocketAddress]
            [java.util.concurrent Executors])
-  (:use [pf.logging]
-        [pf.backends]))
+  (:use [pf.logging]))
 
 (set! *warn-on-reflection* true)
 
