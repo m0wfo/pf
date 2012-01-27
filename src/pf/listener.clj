@@ -3,7 +3,12 @@
         [pf.backends]
         [pf.logging]))
 
-(defrecord Listener [name acceptor])
+(defprotocol Listener
+  (foo [x]))
+
+(extend-type pf.core.Server
+  Listener
+  (foo [x] nil))
 
 (defn handle [in]
   (let [out (new-channel)
@@ -23,7 +28,6 @@
                                           (handle in)))))))
 
 (defn new-listener [name port]
-  (let [acceptor (pf.core/start-server port)]
-    (Listener. name acceptor)))
+  (let [listener (pf.core/create-server port #(handle %))]
+    (pf.core/start listener)))
 
-(defn s [] (start-server 8080 #(handle %)))

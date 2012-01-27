@@ -10,8 +10,6 @@
            [java.util.concurrent Executors])
   (:use [pf.logging]))
 
-(set! *warn-on-reflection* true)
-
 (defprotocol ChannelOps
   "Channel manipulation interface."
   (close-channel [this])
@@ -119,13 +117,13 @@
           active (:active this)
           handler (:handler this)]
 
-    (doto ^AsynchronousSocketChannel server
+    (doto server
       (.bind (InetSocketAddress. (:port this)))
-      (.accept nil ^CompletionHandler (callback
+      (.accept nil (callback
                     (completed [ch attr]
                                (if (true? @up)
                                  (do
-                                   (. ^AsynchronousServerSocketChannel server accept nil ^CompletionHandler this)
+                                   (. server accept nil this)
                                    
                                    (if (true? @parked)
                                      (dosync
