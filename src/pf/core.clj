@@ -5,6 +5,7 @@
             AsynchronousServerSocketChannel
             CompletionHandler]
            [java.nio ByteBuffer]
+           [java.nio.charset Charset]
            [java.net InetSocketAddress]
            [java.util.concurrent Executors])
   (:use [pf.logging]))
@@ -30,16 +31,16 @@
   `(proxy [CompletionHandler] []
      ~@body))
 
-(def charset (java.nio.charset.Charset/forName "UTF-8"))
+(def charset (Charset/forName "UTF-8"))
 
 (defn new-uid {:private true} []
   (. (java.util.UUID/randomUUID) toString))
 
-(defn to-string [buffer]
-  (.toString (.decode charset buffer)))
+(defn to-string [^ByteBuffer buffer]
+  (.toString (.decode ^Charset charset buffer)))
 
 (defn to-bb [string]
-  (.encode charset string))
+  (.encode ^Charset charset ^String string))
 
 (defn test-or-watch [value expected action]
   "Compares a concurrency primitive's value with an expected
@@ -62,25 +63,30 @@
     (dosync (commute (:counter this) dec)))
 
   (read-channel [this cb] (let [bb (ByteBuffer/allocate 512)]
-                  (. bb clear)
+                  (. ^ByteBuffer bb clear)
                   (read-channel this cb bb)))
   
-  (read-channel [this cb buffer] (. (:channel this) read buffer nil (callback
-                                         (completed [bytes-read att]
-                                                    (if (<= 0 bytes-read)
-                                                      (do
-                                                        (. buffer flip)
-                                                        (cb bytes-read buffer))
-                                                      (close-channel this)))
-                                         (failed [reason att]
-                                                 (println "bumcakes")))))
+  (read-channel [this cb buffer] (. ^AsynchronousSocketChannel (:channel this) read
+                                    ^ByteBuffer buffer nil
+                                    ^CompletionHandler (callback
+                                                        (completed [bytes-read att]
+                                                                   (if (<= 0 bytes-read)
+                                                                     (do
+                                                                       (. ^ByteBuffer buffer flip)
+                                                                       (cb bytes-read buffer))
+                                                                     (close-channel this)))
+                                                        (failed [reason att]
+                                                                (println "bumcakes")))))
+
   (write-channel [this cb buffer]
   "Write to a channel, executing a callback when the contents
    of a buffer has been written."
-  (. (:channel this) write buffer nil (callback
-                        (completed [x y]
-                                   (. buffer clear)
-                                   (cb)))))
+    (. ^AsynchronousSocketChannel (:channel this) write
+       ^ByteBuffer buffer nil
+       ^CompletionHandler (callback
+                           (completed [x y]
+                                      (. ^ByteBuffer buffer clear)
+                                      (cb)))))
 
   (relay [source target]
     "Forward the contents of the first channel into a second one."
@@ -113,13 +119,13 @@
           active (:active this)
           handler (:handler this)]
 
-    (doto server
+    (doto ^AsynchronousSocketChannel server
       (.bind (InetSocketAddress. (:port this)))
-      (.accept nil (callback
+      (.accept nil ^CompletionHandler (callback
                     (completed [ch attr]
                                (if (true? @up)
                                  (do
-                                   (. server accept nil this)
+                                   (. ^AsynchronousServerSocketChannel server accept nil ^CompletionHandler this)
                                    
                                    (if (true? @parked)
                                      (dosync
