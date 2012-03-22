@@ -74,7 +74,7 @@
                                                                        (cb bytes-read buffer))
                                                                      (close-channel this)))
                                                         (failed [reason att]
-                                                                (println "bumcakes")))))
+                                                                (close-channel this)))))
 
   (write-channel [this cb buffer]
   "Write to a channel, executing a callback when the contents
